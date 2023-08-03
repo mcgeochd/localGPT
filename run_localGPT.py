@@ -19,7 +19,7 @@ from transformers import (
     pipeline,
 )
 
-from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY
+from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY, DEVICE_TYPES
 
 
 def load_model(device_type, model_id, model_basename=None):
@@ -127,71 +127,65 @@ def load_model(device_type, model_id, model_basename=None):
     return local_llm
 
 
-# chose device typ to run on as well as to show source documents.
-@click.command()
-@click.option(
-    "--device_type",
-    default="cuda" if torch.cuda.is_available() else "cpu",
-    type=click.Choice(
-        [
-            "cpu",
-            "cuda",
-            "ipu",
-            "xpu",
-            "mkldnn",
-            "opengl",
-            "opencl",
-            "ideep",
-            "hip",
-            "ve",
-            "fpga",
-            "ort",
-            "xla",
-            "lazy",
-            "vulkan",
-            "mps",
-            "meta",
-            "hpu",
-            "mtia",
-        ],
-    ),
-    help="Device to run on. (Default is cuda)",
-)
-@click.option(
-    "--show_sources",
-    "-s",
-    is_flag=True,
-    help="Show sources along with answers (Default is False)",
-)
-def main(device_type, show_sources):
+# # chose device typ to run on as well as to show source documents.
+# @click.command()
+# @click.option(
+#     "--device_type",
+#     default="cuda" if torch.cuda.is_available() else "cpu",
+#     type=click.Choice(
+#         [
+#             "cpu",
+#             "cuda",
+#             "ipu",
+#             "xpu",
+#             "mkldnn",
+#             "opengl",
+#             "opencl",
+#             "ideep",
+#             "hip",
+#             "ve",
+#             "fpga",
+#             "ort",
+#             "xla",
+#             "lazy",
+#             "vulkan",
+#             "mps",
+#             "meta",
+#             "hpu",
+#             "mtia",
+#         ],
+#     ),
+#     help="Device to run on. (Default is cuda)",
+# )
+# @click.option(
+#     "--show_sources",
+#     "-s",
+#     is_flag=True,
+#     help="Show sources along with answers (Default is False)",
+# )
+# def main(device_type, show_sources):
+def main():
     """
     This function implements the information retrieval task.
 
 
     1. Loads an embedding model, can be HuggingFaceInstructEmbeddings or HuggingFaceEmbeddings
-    2. Loads the existing vectorestore that was created by inget.py
+    2. Loads the existing vectorestore that was created by ingest.py
     3. Loads the local LLM using load_model function - You can now set different LLMs.
     4. Setup the Question Answer retreival chain.
     5. Question answers.
     """
 
-    logging.info(f"Running on: {device_type}")
-    logging.info(f"Display Source Documents set to: {show_sources}")
-
-    embeddings = HuggingFaceInstructEmbeddings(model_name=EMBEDDING_MODEL_NAME, model_kwargs={"device": device_type})
-
-    # uncomment the following line if you used HuggingFaceEmbeddings in the ingest.py
-    # embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
-
-    # load the vectorstore
-    db = Chroma(
-        persist_directory=PERSIST_DIRECTORY,
-        embedding_function=embeddings,
-        client_settings=CHROMA_SETTINGS,
-    )
-    retriever = db.as_retriever()
-
-    # load the LLM for generating Natural Language responses
+    # Take parameters in as inputs (command line doesn't work great with notebooks)
+    device_type = ""
+    while (device_type not in DEVICE_TYPES):
+        device_type = input("Device type: ")
+    while (show_sources not in [True, False]):
+        show_sources = input ("Show sources: ")
+        if show_sources in ["True", "true", "t"]:
+            show_sources = True
+        elif show_sources in ["False", "false", "f"]:
+            show_sources = False
 
     # for HF models
     # model_id = "TheBloke/vicuna-7B-1.1-HF"
@@ -203,8 +197,8 @@ def main(device_type, show_sources):
     # llm = load_model(device_type, model_id=model_id)
 
     # for GPTQ (quantized) models
-    # model_id = "TheBloke/Nous-Hermes-13B-GPTQ"
-    # model_basename = "nous-hermes-13b-GPTQ-4bit-128g.no-act.order"
+    model_id = "TheBloke/Nous-Hermes-13B-GPTQ"
+    model_basename = "nous-hermes-13b-GPTQ-4bit-128g.no-act.order"
     # model_id = "TheBloke/WizardLM-30B-Uncensored-GPTQ"
     # model_basename = "WizardLM-30B-Uncensored-GPTQ-4bit.act-order.safetensors" # Requires
     # ~21GB VRAM. Using STransformers alongside can potentially create OOM on 24GB cards.
@@ -221,9 +215,34 @@ def main(device_type, show_sources):
     # model_id = "TheBloke/orca_mini_3B-GGML"
     # model_basename = "orca-mini-3b.ggmlv3.q4_0.bin"
 
-    model_id = "TheBloke/Llama-2-7B-Chat-GGML"
-    model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
+    # model_id = "TheBloke/Llama-2-7B-Chat-GGML"
+    # model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
 
+    if (input(f"Use default model id {model_id} and basename {model_basename} (y/n)? ") not in ["Y", "y"]):
+        model_id = input("Model ID: ")
+        model_basename = input("Model basename: ")
+    if (model_basename == "None"):
+        model_basename = None
+
+    logging.info(f"Running on: {device_type}")
+    logging.info(f"Display Source Documents set to: {show_sources}")
+    logging.info(f"Model ID: {model_id}")
+    logging.info(f"Model basename: {model_basename}")
+
+    embeddings = HuggingFaceInstructEmbeddings(model_name=EMBEDDING_MODEL_NAME, model_kwargs={"device": device_type})
+
+    # uncomment the following line if you used HuggingFaceEmbeddings in the ingest.py
+    # embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+
+    # load the vectorstore
+    db = Chroma(
+        persist_directory=PERSIST_DIRECTORY,
+        embedding_function=embeddings,
+        client_settings=CHROMA_SETTINGS,
+    )
+    retriever = db.as_retriever()
+
+    # load the LLM for generating Natural Language responses
     llm = load_model(device_type, model_id=model_id, model_basename=model_basename)
 
     qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)

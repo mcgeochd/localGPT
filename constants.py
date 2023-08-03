@@ -40,3 +40,26 @@ EMBEDDING_MODEL_NAME = "hkunlp/instructor-large"
 # You can also choose a smaller model, don't forget to change HuggingFaceInstructEmbeddings
 # to HuggingFaceEmbeddings in both ingest.py and run_localGPT.py
 # EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+
+# Define the acceptable device types
+DEVICE_TYPES = [
+    "cpu",
+    "cuda",
+    "ipu",
+    "xpu",
+    "mkldnn",
+    "opengl",
+    "opencl",
+    "ideep",
+    "hip",
+    "ve",
+    "fpga",
+    "ort",
+    "xla",
+    "lazy",
+    "vulkan",
+    "mps",
+    "meta",
+    "hpu",
+    "mtia",
+]
