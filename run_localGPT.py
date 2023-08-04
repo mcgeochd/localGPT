@@ -4,7 +4,9 @@ import click
 import torch
 from auto_gptq import AutoGPTQForCausalLM
 from huggingface_hub import hf_hub_download
-from langchain.chains import RetrievalQA
+# from langchain.chains import RetrievalQA
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.llms import HuggingFacePipeline, LlamaCpp
 
@@ -246,7 +248,12 @@ def main():
     # load the LLM for generating Natural Language responses
     llm = load_model(device_type, model_id=model_id, model_basename=model_basename)
 
-    qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
+    # create the conversation memory
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+    # qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
+    qa = ConversationalRetrievalChain.from_llm(llm=llm, retriever=retriever, memory=memory, return_source_documents=True)
+
     # Interactive questions and answers
     while True:
         query = input("\nEnter a query: ")
@@ -264,7 +271,7 @@ def main():
 
         if show_sources:  # this is a flag that you can set to disable showing answers.
             # # Print the relevant sources used for the answer
-            print("----------------------------------SOURCE DOCUMENTS---------------------------")
+            print("\n----------------------------------SOURCE DOCUMENTS---------------------------")
             for document in docs:
                 print("\n> " + document.metadata["source"] + ":")
                 print(document.page_content)
