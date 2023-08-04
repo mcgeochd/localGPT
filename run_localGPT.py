@@ -4,8 +4,9 @@ import click
 import torch
 from auto_gptq import AutoGPTQForCausalLM
 from huggingface_hub import hf_hub_download
-# from langchain.chains import RetrievalQA
-from langchain.chains import ConversationalRetrievalChain
+from langchain.chains import RetrievalQA
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.llms import HuggingFacePipeline, LlamaCpp
@@ -184,10 +185,10 @@ def main():
         device_type = input("Device type: ")
     show_sources = ""
     while (show_sources not in [True, False]):
-        show_sources = input ("Show sources: ")
-        if show_sources in ["True", "true", "t"]:
+        res = input ("Show sources: ")
+        if res == 'y':
             show_sources = True
-        elif show_sources in ["False", "false", "f"]:
+        elif res == 'n':
             show_sources = False
 
     # for HF models
@@ -245,14 +246,29 @@ def main():
     )
     retriever = db.as_retriever()
 
+    template = \
+        """
+        Use the following pieces of context to answer the question at the end. If you don't know the answer,\
+        just say that you don't know, don't try to make up an answer.
+        {context}
+        {history}
+        Question: {question}
+        Helpful Answer:
+        """
+
+    prompt = PromptTemplate(input_variables=["history", "context", "question"], template=template)
+    memory = ConversationBufferMemory(input_key="question", memory_key="history")
+
     # load the LLM for generating Natural Language responses
     llm = load_model(device_type, model_id=model_id, model_basename=model_basename)
 
-    # create the conversation memory
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-    # qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
-    qa = ConversationalRetrievalChain.from_llm(llm=llm, retriever=retriever, memory=memory, return_source_documents=True)
+    qa = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=retriever,
+        return_source_documents=True,
+        chain_type_kwargs={"prompt": prompt, "memory": memory},
+    )
 
     # Interactive questions and answers
     while True:
