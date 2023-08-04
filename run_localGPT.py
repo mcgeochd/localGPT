@@ -180,6 +180,7 @@ def main():
     device_type = ""
     while (device_type not in DEVICE_TYPES):
         device_type = input("Device type: ")
+    show_sources = ""
     while (show_sources not in [True, False]):
         show_sources = input ("Show sources: ")
         if show_sources in ["True", "true", "t"]:
