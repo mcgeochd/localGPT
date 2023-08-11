@@ -272,7 +272,7 @@ def main(device_type, show_sources):
             documents.append(docs)
 
     # answer file
-    af = "autostore/answers_" + time + ".csv"
+    af = "auto_store/answers_" + time + ".csv"
     with open(af, "w", newline="") as file:
         writer = csv.writer(file)
         topline = (
