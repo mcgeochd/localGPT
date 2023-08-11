@@ -262,7 +262,7 @@ def main(device_type, show_sources):
     time = str(datetime.datetime.now())
 
     # question file
-    qf = "autostore/input_questions.csv"
+    qf = "auto_store/input_questions.csv"
     with open(qf, "r", newline="") as csvfile:
         questions = csv.reader(csvfile, delimiter=" ", quotechar="|")
         for question in questions:
