@@ -266,7 +266,7 @@ def main(device_type, show_sources):
     with open(qf, "r", newline="") as csvfile:
         questions = csv.reader(csvfile, delimiter=" ", quotechar="|")
         for question in questions:
-            res = qa(query)
+            res = qa(question)
             answer, docs = res["result"], res["source_documents"]
             answers.append(answer)
             documents.append(docs)
