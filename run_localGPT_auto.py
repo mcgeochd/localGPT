@@ -266,7 +266,7 @@ def main(device_type, show_sources):
     with open(qf, "r", newline="") as csvfile:
         questions = csv.reader(csvfile, delimiter=" ", quotechar="|")
         for question in questions:
-            res = qa(question)
+            res = qa(question[0])
             answer, docs = res["result"], res["source_documents"]
             answers.append(answer)
             documents.append(docs)
@@ -274,7 +274,7 @@ def main(device_type, show_sources):
     # answer file
     af = "auto_store/answers_" + time + ".csv"
     with open(af, "w", newline="") as file:
-        writer = csv.writer(file)
+        writer = csv.writer(file, delimiter=',')
         topline = (
             "Answers from questions set: "
             + qf
@@ -285,9 +285,9 @@ def main(device_type, show_sources):
             + " at time "
             + time
         )
-        writer.writerow(topline)
+        writer.writerow([topline])
         for i in range(0, len(answers)):
-            writer.writerow([answer[i], docs[i]])
+            writer.writerow([answers[i], documents[i]])
 
 
 if __name__ == "__main__":
