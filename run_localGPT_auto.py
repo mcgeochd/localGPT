@@ -273,6 +273,9 @@ def main():
         chain_type_kwargs={"prompt": prompt, "memory": memory},
     )
 
+    # list of questions
+    questions = []
+
     # list of answers
     answers = []
     # list of source documents
@@ -282,9 +285,9 @@ def main():
     time = str(datetime.datetime.now())
 
     # question file
-    qf = "auto_store/input_questions.csv"
-    with open(qf, "r", newline="") as csvfile:
-        questions = csv.reader(csvfile, delimiter=" ", quotechar="|")
+    qf = "/content/localGPT/auto_store/input_questions.txt"
+    with open(qf, "r", newline="") as qfile:
+        questions = qfile.readlines()
         for question in questions:
             res = qa(question[0])
             answer, docs = res["result"], res["source_documents"]
@@ -292,9 +295,8 @@ def main():
             documents.append(docs)
 
     # answer file
-    af = "auto_store/answers_" + time + ".csv"
-    with open(af, "w", newline="") as file:
-        writer = csv.writer(file, delimiter=',')
+    af = "/content/localGPT/auto_store/answers_" + time + ".txt"
+    with open(af, "w", newline="") as afile:
         topline = (
             "Answers from questions set: "
             + qf
@@ -305,9 +307,10 @@ def main():
             + " at time "
             + time
         )
-        writer.writerow([topline])
+        afile.writelines([topline])
         for i in range(0, len(answers)):
-            writer.writerow([answers[i], documents[i]])
+            afile.writelines(str(answers[i]) + "\n")
+
 
 
 if __name__ == "__main__":
