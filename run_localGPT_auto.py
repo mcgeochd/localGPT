@@ -1,13 +1,13 @@
 import logging
 
-import csv
-import datetime
-
 import click
 import torch
 from auto_gptq import AutoGPTQForCausalLM
 from huggingface_hub import hf_hub_download
 from langchain.chains import RetrievalQA
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
+from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.llms import HuggingFacePipeline, LlamaCpp
 
@@ -22,7 +22,7 @@ from transformers import (
     pipeline,
 )
 
-from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY
+from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY, DEVICE_TYPES
 
 
 def load_model(device_type, model_id, model_basename=None):
@@ -130,56 +130,108 @@ def load_model(device_type, model_id, model_basename=None):
     return local_llm
 
 
-# chose device typ to run on as well as to show source documents.
-@click.command()
-@click.option(
-    "--device_type",
-    default="cuda" if torch.cuda.is_available() else "cpu",
-    type=click.Choice(
-        [
-            "cpu",
-            "cuda",
-            "ipu",
-            "xpu",
-            "mkldnn",
-            "opengl",
-            "opencl",
-            "ideep",
-            "hip",
-            "ve",
-            "fpga",
-            "ort",
-            "xla",
-            "lazy",
-            "vulkan",
-            "mps",
-            "meta",
-            "hpu",
-            "mtia",
-        ],
-    ),
-    help="Device to run on. (Default is cuda)",
-)
-@click.option(
-    "--show_sources",
-    "-s",
-    is_flag=True,
-    help="Show sources along with answers (Default is False)",
-)
-def main(device_type, show_sources):
+# # chose device typ to run on as well as to show source documents.
+# @click.command()
+# @click.option(
+#     "--device_type",
+#     default="cuda" if torch.cuda.is_available() else "cpu",
+#     type=click.Choice(
+#         [
+#             "cpu",
+#             "cuda",
+#             "ipu",
+#             "xpu",
+#             "mkldnn",
+#             "opengl",
+#             "opencl",
+#             "ideep",
+#             "hip",
+#             "ve",
+#             "fpga",
+#             "ort",
+#             "xla",
+#             "lazy",
+#             "vulkan",
+#             "mps",
+#             "meta",
+#             "hpu",
+#             "mtia",
+#         ],
+#     ),
+#     help="Device to run on. (Default is cuda)",
+# )
+# @click.option(
+#     "--show_sources",
+#     "-s",
+#     is_flag=True,
+#     help="Show sources along with answers (Default is False)",
+# )
+# def main(device_type, show_sources):
+def main():
     """
     This function implements the information retrieval task.
 
 
     1. Loads an embedding model, can be HuggingFaceInstructEmbeddings or HuggingFaceEmbeddings
-    2. Loads the existing vectorestore that was created by inget.py
+    2. Loads the existing vectorestore that was created by ingest.py
     3. Loads the local LLM using load_model function - You can now set different LLMs.
     4. Setup the Question Answer retreival chain.
     5. Question answers.
     """
 
+    # Take parameters in as inputs (command line doesn't work great with notebooks)
+    device_type = ""
+    while (device_type not in DEVICE_TYPES):
+        device_type = input("Device type: ")
+    show_sources = ""
+    while (show_sources not in [True, False]):
+        res = input ("Show sources: ")
+        if res == 'y':
+            show_sources = True
+        elif res == 'n':
+            show_sources = False
+
+    # for HF models
+    # model_id = "TheBloke/vicuna-7B-1.1-HF"
+    # model_basename = None
+    # model_id = "TheBloke/Wizard-Vicuna-7B-Uncensored-HF"
+    # model_id = "TheBloke/guanaco-7B-HF"
+    # model_id = 'NousResearch/Nous-Hermes-13b' # Requires ~ 23GB VRAM. Using STransformers
+    # alongside will 100% create OOM on 24GB cards.
+    # llm = load_model(device_type, model_id=model_id)
+
+    # for GPTQ (quantized) models
+    model_id = "TheBloke/Nous-Hermes-13B-GPTQ"
+    model_basename = "nous-hermes-13b-GPTQ-4bit-128g.no-act.order"
+    # model_id = "TheBloke/WizardLM-30B-Uncensored-GPTQ"
+    # model_basename = "WizardLM-30B-Uncensored-GPTQ-4bit.act-order.safetensors" # Requires
+    # ~21GB VRAM. Using STransformers alongside can potentially create OOM on 24GB cards.
+    # model_id = "TheBloke/wizardLM-7B-GPTQ"
+    # model_basename = "wizardLM-7B-GPTQ-4bit.compat.no-act-order.safetensors"
+    # model_id = "TheBloke/WizardLM-7B-uncensored-GPTQ"
+    # model_basename = "WizardLM-7B-uncensored-GPTQ-4bit-128g.compat.no-act-order.safetensors"
+
+    # for GGML (quantized cpu+gpu+mps) models - check if they support llama.cpp
+    # model_id = "TheBloke/wizard-vicuna-13B-GGML"
+    # model_basename = "wizard-vicuna-13B.ggmlv3.q4_0.bin"
+    # model_basename = "wizard-vicuna-13B.ggmlv3.q6_K.bin"
+    # model_basename = "wizard-vicuna-13B.ggmlv3.q2_K.bin"
+    # model_id = "TheBloke/orca_mini_3B-GGML"
+    # model_basename = "orca-mini-3b.ggmlv3.q4_0.bin"
+
+    # model_id = "TheBloke/Llama-2-7B-Chat-GGML"
+    # model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
+
+    if (input(f"Use default model id {model_id} and basename {model_basename} (y/n)? ") not in ["Y", "y"]):
+        model_id = input("Model ID: ")
+        model_basename = input("Model basename: ")
+    if (model_basename == "None"):
+        model_basename = None
+
     logging.info(f"Running on: {device_type}")
     logging.info(f"Display Source Documents set to: {show_sources}")
+    logging.info(f"Model ID: {model_id}")
+    logging.info(f"Model basename: {model_basename}")
 
     embeddings = HuggingFaceInstructEmbeddings(model_name=EMBEDDING_MODEL_NAME, model_kwargs={"device": device_type})
 
@@ -194,64 +246,29 @@ def main(device_type, show_sources):
     )
     retriever = db.as_retriever()
 
+    template = \
+        """
+        Use the following pieces of context to answer the question at the end. If you don't know the answer,\
+        just say that you don't know, don't try to make up an answer.
+        {context}
+        {history}
+        Question: {question}
+        Helpful Answer:
+        """
+
+    prompt = PromptTemplate(input_variables=["history", "context", "question"], template=template)
+    memory = ConversationBufferMemory(input_key="question", memory_key="history")
+
     # load the LLM for generating Natural Language responses
-
-    # for HF models
-    # model_id = "TheBloke/vicuna-7B-1.1-HF"
-    # model_basename = None
-    # model_id = "TheBloke/Wizard-Vicuna-7B-Uncensored-HF"
-    # model_id = "TheBloke/guanaco-7B-HF"
-    # model_id = 'NousResearch/Nous-Hermes-13b' # Requires ~ 23GB VRAM. Using STransformers
-    # alongside will 100% create OOM on 24GB cards.
-    # llm = load_model(device_type, model_id=model_id)
-
-    # for GPTQ (quantized) models
-    # model_id = "TheBloke/Nous-Hermes-13B-GPTQ"
-    # model_basename = "nous-hermes-13b-GPTQ-4bit-128g.no-act.order"
-    # model_id = "TheBloke/WizardLM-30B-Uncensored-GPTQ"
-    # model_basename = "WizardLM-30B-Uncensored-GPTQ-4bit.act-order.safetensors" # Requires
-    # ~21GB VRAM. Using STransformers alongside can potentially create OOM on 24GB cards.
-    # model_id = "TheBloke/wizardLM-7B-GPTQ"
-    # model_basename = "wizardLM-7B-GPTQ-4bit.compat.no-act-order.safetensors"
-    # model_id = "TheBloke/WizardLM-7B-uncensored-GPTQ"
-    # model_basename = "WizardLM-7B-uncensored-GPTQ-4bit-128g.compat.no-act-order.safetensors"
-
-    # for GGML (quantized cpu+gpu+mps) models - check if they support llama.cpp
-    model_id = "TheBloke/wizard-vicuna-13B-GGML"
-    model_basename = "wizard-vicuna-13B.ggmlv3.q4_0.bin"
-    # model_basename = "wizard-vicuna-13B.ggmlv3.q6_K.bin"
-    # model_basename = "wizard-vicuna-13B.ggmlv3.q2_K.bin"
-    # model_id = "TheBloke/orca_mini_3B-GGML"
-    # model_basename = "orca-mini-3b.ggmlv3.q4_0.bin"
-
-    # model_id = "TheBloke/Llama-2-7B-Chat-GGML"
-    # model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
-
     llm = load_model(device_type, model_id=model_id, model_basename=model_basename)
 
-    qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
-    # Interactive questions and answers
-    # while True:
-    #     query = input("\nEnter a query: ")
-    #     if query == "exit":
-    #         break
-    #     # Get the answer from the chain
-    #     res = qa(query)
-    #     answer, docs = res["result"], res["source_documents"]
-
-    #     # Print the result
-    #     print("\n\n> Question:")
-    #     print(query)
-    #     print("\n> Answer:")
-    #     print(answer)
-
-    #     if show_sources:  # this is a flag that you can set to disable showing answers.
-    #         # # Print the relevant sources used for the answer
-    #         print("----------------------------------SOURCE DOCUMENTS---------------------------")
-    #         for document in docs:
-    #             print("\n> " + document.metadata["source"] + ":")
-    #             print(document.page_content)
-    #         print("----------------------------------SOURCE DOCUMENTS---------------------------")
+    qa = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=retriever,
+        return_source_documents=True,
+        chain_type_kwargs={"prompt": prompt, "memory": memory},
+    )
 
     # list of answers
     answers = []
