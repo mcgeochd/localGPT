@@ -5,9 +5,8 @@ import torch
 from auto_gptq import AutoGPTQForCausalLM
 from huggingface_hub import hf_hub_download
 from langchain.chains import RetrievalQA
-from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferWindowMemory
 from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.llms import HuggingFacePipeline, LlamaCpp
 
@@ -28,7 +27,7 @@ from langchain.chat_models import ChatOpenAI
 from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY, DEVICE_TYPES
 
 
-def load_model(device_type, model_id, model_basename=None):
+def load_model(device_type, model_id, max_length, model_basename=None):
     """
     Select a model for text generation using the HuggingFace library.
     If you are running this for the first time, it will download a model for you.
@@ -120,7 +119,7 @@ def load_model(device_type, model_id, model_basename=None):
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_length=2048,
+        max_length=max_length,
         temperature=0,
         top_p=0.95,
         repetition_penalty=1.15,
@@ -170,13 +169,17 @@ def load_model(device_type, model_id, model_basename=None):
 #     help="Show sources along with answers (Default is False)",
 # )
 @click.option(
-"--openai",
-"-o",
-is_flag=True,
-help="Use OpenAI as the llm model instead (Default is False)",
+    "--openai",
+    "-o",
+    is_flag=True,
+    help="Use OpenAI as the llm model instead (Default is False)",
+)
+@click.option(
+    "--max_length",
+    default = 2048
 )
 # def main(device_type, show_sources):
-def main(device_type, openai):
+def main(device_type, max_length, openai):
     """
     This function implements the information retrieval task.
 
@@ -251,7 +254,7 @@ def main(device_type, openai):
         )
 
         # load the LLM for generating Natural Language responses
-        llm = load_model(device_type, model_id=model_id, model_basename=model_basename)
+        llm = load_model(device_type, model_id=model_id, max_length=max_length, model_basename=model_basename)
 
     # uncomment the following line if you used HuggingFaceEmbeddings in the ingest.py
     # embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
@@ -275,7 +278,7 @@ def main(device_type, openai):
         """
 
     prompt = PromptTemplate(input_variables=["history", "context", "question"], template=template)
-    memory = ConversationBufferMemory(input_key="question", memory_key="history")
+    memory = ConversationBufferWindowMemory(input_key="question", memory_key="history", k=50)
 
     qa = RetrievalQA.from_chain_type(
         llm=llm,
@@ -284,6 +287,15 @@ def main(device_type, openai):
         return_source_documents=True,
         chain_type_kwargs={"prompt": prompt, "memory": memory},
     )
+
+    # Remove old chat history to stay within context window
+    def truncate_history(history):
+        num_to_remove = len(history) - max_length
+        if num_to_remove > 0:
+            history = history[-max_length:] 
+        return history
+
+    qa.pre_process = truncate_history
 
     # Interactive questions and answers
     while True:
