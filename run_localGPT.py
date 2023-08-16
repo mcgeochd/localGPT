@@ -22,6 +22,9 @@ from transformers import (
     pipeline,
 )
 
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.chat_models import ChatOpenAI
+
 from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY, DEVICE_TYPES
 
 
@@ -130,44 +133,50 @@ def load_model(device_type, model_id, model_basename=None):
     return local_llm
 
 
-# # chose device typ to run on as well as to show source documents.
-# @click.command()
-# @click.option(
-#     "--device_type",
-#     default="cuda" if torch.cuda.is_available() else "cpu",
-#     type=click.Choice(
-#         [
-#             "cpu",
-#             "cuda",
-#             "ipu",
-#             "xpu",
-#             "mkldnn",
-#             "opengl",
-#             "opencl",
-#             "ideep",
-#             "hip",
-#             "ve",
-#             "fpga",
-#             "ort",
-#             "xla",
-#             "lazy",
-#             "vulkan",
-#             "mps",
-#             "meta",
-#             "hpu",
-#             "mtia",
-#         ],
-#     ),
-#     help="Device to run on. (Default is cuda)",
-# )
+# chose device typ to run on as well as to show source documents.
+@click.command()
+@click.option(
+    "--device_type",
+    default="cuda" if torch.cuda.is_available() else "cpu",
+    type=click.Choice(
+        [
+            "cpu",
+            "cuda",
+            "ipu",
+            "xpu",
+            "mkldnn",
+            "opengl",
+            "opencl",
+            "ideep",
+            "hip",
+            "ve",
+            "fpga",
+            "ort",
+            "xla",
+            "lazy",
+            "vulkan",
+            "mps",
+            "meta",
+            "hpu",
+            "mtia",
+        ],
+    ),
+    help="Device to run on. (Default is cuda)",
+)
 # @click.option(
 #     "--show_sources",
 #     "-s",
 #     is_flag=True,
 #     help="Show sources along with answers (Default is False)",
 # )
+@click.option(
+"--openai",
+"-o",
+is_flag=True,
+help="Use OpenAI as the llm model instead (Default is False)",
+)
 # def main(device_type, show_sources):
-def main():
+def main(device_type, openai):
     """
     This function implements the information retrieval task.
 
@@ -175,17 +184,14 @@ def main():
     1. Loads an embedding model, can be HuggingFaceInstructEmbeddings or HuggingFaceEmbeddings
     2. Loads the existing vectorestore that was created by ingest.py
     3. Loads the local LLM using load_model function - You can now set different LLMs.
-    4. Setup the Question Answer retreival chain.
+    4. Setup the Question Answer retrieval chain.
     5. Question answers.
     """
 
     # Take parameters in as inputs (command line doesn't work great with notebooks)
-    device_type = ""
-    while (device_type not in DEVICE_TYPES):
-        device_type = input("Device type: ")
     show_sources = ""
     while (show_sources not in [True, False]):
-        res = input ("Show sources: ")
+        res = input ("Show sources (y/n): ")
         if res == 'y':
             show_sources = True
         elif res == 'n':
@@ -222,18 +228,30 @@ def main():
     # model_id = "TheBloke/Llama-2-7B-Chat-GGML"
     # model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
 
-    if (input(f"Use default model id {model_id} and basename {model_basename} (y/n)? ") not in ["Y", "y"]):
-        model_id = input("Model ID: ")
-        model_basename = input("Model basename: ")
-    if (model_basename == "None"):
-        model_basename = None
+    if openai:
+        logging.info("Using OpenAI models, your queries are NOT local")
+        openai_api_key = input("Please provide a valid OpenAI API key: ")
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+        llm = ChatOpenAI(openai_api_key=openai_api_key)
+    else:
+        if (input(f"Use default model id {model_id} and basename {model_basename} (y/n)? ") not in ["Y", "y"]):
+            model_id = input("Model ID: ")
+            model_basename = input("Model basename: ")
+        if (model_basename == "None"):
+            model_basename = None
 
-    logging.info(f"Running on: {device_type}")
-    logging.info(f"Display Source Documents set to: {show_sources}")
-    logging.info(f"Model ID: {model_id}")
-    logging.info(f"Model basename: {model_basename}")
+        logging.info(f"Running on: {device_type}")
+        logging.info(f"Display Source Documents set to: {show_sources}")
+        logging.info(f"Model ID: {model_id}")
+        logging.info(f"Model basename: {model_basename}")
 
-    embeddings = HuggingFaceInstructEmbeddings(model_name=EMBEDDING_MODEL_NAME, model_kwargs={"device": device_type})
+        embeddings = HuggingFaceInstructEmbeddings(
+            model_name=EMBEDDING_MODEL_NAME,
+            model_kwargs={"device": device_type},
+        )
+
+        # load the LLM for generating Natural Language responses
+        llm = load_model(device_type, model_id=model_id, model_basename=model_basename)
 
     # uncomment the following line if you used HuggingFaceEmbeddings in the ingest.py
     # embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
@@ -258,9 +276,6 @@ def main():
 
     prompt = PromptTemplate(input_variables=["history", "context", "question"], template=template)
     memory = ConversationBufferMemory(input_key="question", memory_key="history")
-
-    # load the LLM for generating Natural Language responses
-    llm = load_model(device_type, model_id=model_id, model_basename=model_basename)
 
     qa = RetrievalQA.from_chain_type(
         llm=llm,

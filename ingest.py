@@ -9,6 +9,8 @@ from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.text_splitter import Language, RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
 
+from langchain.embeddings import OpenAIEmbeddings
+
 from constants import (
     CHROMA_SETTINGS,
     DOCUMENT_MAP,
@@ -116,7 +118,14 @@ def split_documents(documents: list[Document]) -> tuple[list[Document], list[Doc
     ),
     help="Device to run on. (Default is cuda)",
 )
-def main(device_type):
+@click.option(
+"--openai",
+"-o",
+is_flag=True,
+help="Use OpenAI as the embedding model instead (Default is False)",
+)
+
+def main(device_type, openai):
     # Take variable source directory because we're in a notebook
     source_directory = input('Source directory (type "default" for default): ')
     if source_directory == "default":
@@ -136,10 +145,15 @@ def main(device_type):
     logging.info(f"Split into {len(texts)} chunks of text")
 
     # Create embeddings
-    embeddings = HuggingFaceInstructEmbeddings(
-        model_name=EMBEDDING_MODEL_NAME,
-        model_kwargs={"device": device_type},
-    )
+    if openai:
+        logging.info("Using OpenAI embedding model, your documents are NOT local")
+        embeddings = OpenAIEmbeddings()
+    else:
+        logging.info("Using HuggingFaceInstructEmbeddings, your documents are local")
+        embeddings = HuggingFaceInstructEmbeddings(
+            model_name=EMBEDDING_MODEL_NAME,
+            model_kwargs={"device": device_type},
+        )
     # change the embedding type here if you are running into issues.
     # These are much smaller embeddings and will work for most appications
     # If you use HuggingFaceEmbeddings, make sure to also use the same in the
