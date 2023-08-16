@@ -147,7 +147,8 @@ def main(device_type, openai):
     # Create embeddings
     if openai:
         logging.info("Using OpenAI embedding model, your documents are NOT local")
-        embeddings = OpenAIEmbeddings()
+        openai_api_key = input("Please provide a valid OpenAI API key: ")
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
     else:
         logging.info("Using HuggingFaceInstructEmbeddings, your documents are local")
         embeddings = HuggingFaceInstructEmbeddings(
