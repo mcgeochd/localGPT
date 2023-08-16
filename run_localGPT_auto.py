@@ -184,14 +184,14 @@ def main():
 
     # Take parameters in as inputs (command line doesn't work great with notebooks)
     device_type = ""
-    while (device_type not in DEVICE_TYPES):
+    while device_type not in DEVICE_TYPES:
         device_type = input("Device type: ")
     show_sources = ""
-    while (show_sources not in [True, False]):
-        res = input ("Show sources: ")
-        if res == 'y':
+    while show_sources not in [True, False]:
+        res = input("Show sources: ")
+        if res == "y":
             show_sources = True
-        elif res == 'n':
+        elif res == "n":
             show_sources = False
 
     # for HF models
@@ -225,10 +225,10 @@ def main():
     # model_id = "TheBloke/Llama-2-7B-Chat-GGML"
     # model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
 
-    if (input(f"Use default model id {model_id} and basename {model_basename} (y/n)? ") not in ["Y", "y"]):
+    if input(f"Use default model id {model_id} and basename {model_basename} (y/n)? ") not in ["Y", "y"]:
         model_id = input("Model ID: ")
         model_basename = input("Model basename: ")
-    if (model_basename == "None"):
+    if model_basename == "None":
         model_basename = None
 
     logging.info(f"Running on: {device_type}")
@@ -249,8 +249,7 @@ def main():
     )
     retriever = db.as_retriever()
 
-    template = \
-        """
+    template = """
         Use the following pieces of context to answer the question at the end. If you don't know the answer,\
         just say that you don't know, don't try to make up an answer.
         {context}
@@ -288,8 +287,10 @@ def main():
     qf = "/content/localGPT/auto_store/input_questions.txt"
     with open(qf, "r", newline="") as qfile:
         questions = qfile.readlines()
+        i = 0
         for question in questions:
-            res = qa(question[0])
+            res = qa(question[i])
+            i = i + 1
             answer, docs = res["result"], res["source_documents"]
             answers.append(answer)
             documents.append(docs)
@@ -310,7 +311,6 @@ def main():
         afile.writelines([topline])
         for i in range(0, len(answers)):
             afile.writelines(str(answers[i]) + "\n")
-
 
 
 if __name__ == "__main__":
