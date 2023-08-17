@@ -5,11 +5,12 @@ import torch
 from auto_gptq import AutoGPTQForCausalLM
 from huggingface_hub import hf_hub_download
 from langchain.chains import RetrievalQA
-from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
+from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.llms import HuggingFacePipeline, LlamaCpp
+from langchain.formatting import formatter
 
 # from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
@@ -272,42 +273,43 @@ def main(device_type, max_length, openai):
 
     template = \
         """
-        Use the following pieces of context to answer the question at the end. If you don't know the answer,\
+        Use the following context and conversation history to answer the question at the end. If you don't know the answer,\
         just say that you don't know, don't try to make up an answer.
-        {context}
-        {history}
+        Context: {context}
+        History: {history}
         Question: {question}
         Helpful Answer:
         """
 
     prompt = PromptTemplate(input_variables=["history", "context", "question"], template=template)
-    memory = ConversationBufferWindowMemory(input_key="question", memory_key="history", k=50)
+    memory = ConversationBufferMemory(input_key="question", memory_key="history")
 
-    # qa = RetrievalQA.from_chain_type(
-    #     llm=llm,
-    #     chain_type="stuff",
-    #     retriever=retriever,
-    #     return_source_documents=True,
-    #     chain_type_kwargs={"prompt": prompt, "memory": memory},
-    # )
+    # # Remove old chat history to stay within context window
+    # def truncate_prompt(history, context, question):
+    #     template = \
+    #     """
+    #     Use the following context and conversation history to answer the question at the end. If you don't know the answer,\
+    #     just say that you don't know, don't try to make up an answer.
+    #     Context: {context}
+    #     History: {history}
+    #     Question: {question}
+    #     Helpful Answer:
+    #     """
+    #     prompt = formatter.format(template, context, history, question)
+    #     extra = len(prompt) - max_length
+    #     if extra > 0:
+    #         prompt = formatter.format(template, context, history[extra:], question)
+    #     return prompt
+    
+    # truncate_prompt.input_variables=["history", "context", "question"]
 
-    qa = ConversationalRetrievalChain(
+    qa = RetrievalQA.from_chain_type(
         llm=llm,
+        chain_type="stuff",
         retriever=retriever,
         return_source_documents=True,
-        prompt=prompt,
-        memory=memory
+        chain_type_kwargs={"prompt": prompt, "memory": memory},
     )
-
-    # Remove old chat history to stay within context window
-    def truncate_history(history):
-        max_history_length = int(max_length/2)
-        num_to_remove = len(history) - max_history_length
-        if num_to_remove > 0:
-            history = history[-max_history_length:] 
-        return history
-
-    qa.pre_process = truncate_history
 
     # Interactive questions and answers
     while True:
