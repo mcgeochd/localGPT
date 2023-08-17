@@ -5,6 +5,7 @@ import torch
 from auto_gptq import AutoGPTQForCausalLM
 from huggingface_hub import hf_hub_download
 from langchain.chains import RetrievalQA
+from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.embeddings import HuggingFaceInstructEmbeddings
@@ -213,7 +214,7 @@ def main(device_type, max_length, openai):
     # model_id = "TheBloke/Nous-Hermes-13B-GPTQ"
     # model_basename = "nous-hermes-13b-GPTQ-4bit-128g.no-act.order"
     model_id = "TheBloke/orca_mini_v3_13B-GPTQ"
-    model_basename = "orca_mini_v3_13B-GPTQ-4bit-32g.safetensors"
+    model_basename = "gptq_model-4bit-128g.safetensors"
     # model_id = "TheBloke/WizardLM-30B-Uncensored-GPTQ"
     # model_basename = "WizardLM-30B-Uncensored-GPTQ-4bit.act-order.safetensors" # Requires
     # ~21GB VRAM. Using STransformers alongside can potentially create OOM on 24GB cards.
@@ -282,19 +283,28 @@ def main(device_type, max_length, openai):
     prompt = PromptTemplate(input_variables=["history", "context", "question"], template=template)
     memory = ConversationBufferWindowMemory(input_key="question", memory_key="history", k=50)
 
-    qa = RetrievalQA.from_chain_type(
+    # qa = RetrievalQA.from_chain_type(
+    #     llm=llm,
+    #     chain_type="stuff",
+    #     retriever=retriever,
+    #     return_source_documents=True,
+    #     chain_type_kwargs={"prompt": prompt, "memory": memory},
+    # )
+
+    qa = ConversationalRetrievalChain(
         llm=llm,
-        chain_type="stuff",
         retriever=retriever,
         return_source_documents=True,
-        chain_type_kwargs={"prompt": prompt, "memory": memory},
+        prompt=prompt,
+        memory=memory
     )
 
     # Remove old chat history to stay within context window
     def truncate_history(history):
-        num_to_remove = len(history) - max_length
+        max_history_length = int(max_length/2)
+        num_to_remove = len(history) - max_history_length
         if num_to_remove > 0:
-            history = history[-max_length:] 
+            history = history[-max_history_length:] 
         return history
 
     qa.pre_process = truncate_history
