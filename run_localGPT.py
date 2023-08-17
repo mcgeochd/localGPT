@@ -210,8 +210,10 @@ def main(device_type, max_length, openai):
     # llm = load_model(device_type, model_id=model_id)
 
     # for GPTQ (quantized) models
-    model_id = "TheBloke/Nous-Hermes-13B-GPTQ"
-    model_basename = "nous-hermes-13b-GPTQ-4bit-128g.no-act.order"
+    # model_id = "TheBloke/Nous-Hermes-13B-GPTQ"
+    # model_basename = "nous-hermes-13b-GPTQ-4bit-128g.no-act.order"
+    model_id = "TheBloke/orca_mini_v3_13B-GPTQ"
+    model_basename = "orca_mini_v3_13B-GPTQ-4bit-32g.safetensors"
     # model_id = "TheBloke/WizardLM-30B-Uncensored-GPTQ"
     # model_basename = "WizardLM-30B-Uncensored-GPTQ-4bit.act-order.safetensors" # Requires
     # ~21GB VRAM. Using STransformers alongside can potentially create OOM on 24GB cards.
@@ -237,7 +239,7 @@ def main(device_type, max_length, openai):
         embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
         llm = ChatOpenAI(openai_api_key=openai_api_key)
     else:
-        if (input(f"Use default model id {model_id} and basename {model_basename} (y/n)? ") not in ["Y", "y"]):
+        if (input(f"Use default model id and basename\n{model_id}\n{model_basename}\n(y/n)? ") not in ["Y", "y"]):
             model_id = input("Model ID: ")
             model_basename = input("Model basename: ")
         if (model_basename == "None"):
