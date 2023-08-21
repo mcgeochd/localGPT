@@ -102,7 +102,7 @@ RETRIEVER = DB.as_retriever()
 # model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
 
 model_id = "TheBloke/orca_mini_v3_13B-GPTQ"
-model_basename = "gptq_model-4bit-128g.safetensors"
+model_basename = "model.safetensors"
 
 if (input(f"Use default model id and basename\n{model_id}\n{model_basename}\n(y/n)? ") not in ["Y", "y"]):
     model_id = input("Model ID: ")
@@ -110,7 +110,11 @@ if (input(f"Use default model id and basename\n{model_id}\n{model_basename}\n(y/
 if (model_basename == "None"):
     model_basename = None
 
-LLM = load_model(device_type=DEVICE_TYPE, model_id=model_id, model_basename=model_basename)
+max_length = -1
+while max_length > 0 and max_length <= 4096:
+    max_length = input("Maximum context length (0 < L <= 4096): ")
+
+LLM = load_model(device_type=DEVICE_TYPE, model_id=model_id, max_length=max_length, model_basename=model_basename)
 
 QA = RetrievalQA.from_chain_type(
     llm=LLM, chain_type="stuff", retriever=RETRIEVER, return_source_documents=SHOW_SOURCES

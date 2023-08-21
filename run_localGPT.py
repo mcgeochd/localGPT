@@ -214,7 +214,7 @@ def main(device_type, max_length, openai):
     # model_id = "TheBloke/Nous-Hermes-13B-GPTQ"
     # model_basename = "nous-hermes-13b-GPTQ-4bit-128g.no-act.order"
     model_id = "TheBloke/orca_mini_v3_13B-GPTQ"
-    model_basename = "gptq_model-4bit-128g.safetensors"
+    model_basename = "model.safetensors"
     # model_id = "TheBloke/WizardLM-30B-Uncensored-GPTQ"
     # model_basename = "WizardLM-30B-Uncensored-GPTQ-4bit.act-order.safetensors" # Requires
     # ~21GB VRAM. Using STransformers alongside can potentially create OOM on 24GB cards.
