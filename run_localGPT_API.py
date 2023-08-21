@@ -28,7 +28,13 @@ from werkzeug.utils import secure_filename
 from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY
 
 DEVICE_TYPE = "cuda" if torch.cuda.is_available() else "cpu"
-SHOW_SOURCES = True
+SHOW_SOURCES = ""
+while (SHOW_SOURCES not in [True, False]):
+    res = input ("Show sources (y/n): ")
+    if res == 'y':
+        SHOW_SOURCES = True
+    elif res == 'n':
+        SHOW_SOURCES = False
 logging.info(f"Running on: {DEVICE_TYPE}")
 logging.info(f"Display Source Documents set to: {SHOW_SOURCES}")
 
@@ -44,16 +50,24 @@ if os.path.exists(PERSIST_DIRECTORY):
 else:
     print("The directory does not exist")
 
-run_langest_commands = ["python", "ingest.py"]
+# Ingest documents
 if DEVICE_TYPE == "cpu":
-    run_langest_commands.append("--device_type")
-    run_langest_commands.append(DEVICE_TYPE)
+    while True:
+        ingest = input("Ingest documents? (y/n)")
+        if ingest in ["Y", "y"]:
+            # Run the document ingestion process. 
+            run_langest_commands = ["python", "ingest.py"]
+            run_langest_commands.append("--device_type")
+            run_langest_commands.append(DEVICE_TYPE)
 
-result = subprocess.run(run_langest_commands, capture_output=True)
-if result.returncode != 0:
-    raise FileNotFoundError(
-        "No files were found inside SOURCE_DOCUMENTS, please put a starter file inside before starting the API!"
-    )
+            result = subprocess.run(run_langest_commands, capture_output=True)
+            if result.returncode != 0:
+                raise FileNotFoundError(
+                    "No files were found inside SOURCE_DOCUMENTS, please put a starter file inside before starting the API!"
+                )
+            break
+        elif ingest in ["N", "n"]:
+            break
 
 # load the vectorstore
 DB = Chroma(
@@ -84,8 +98,17 @@ RETRIEVER = DB.as_retriever()
 # model_id = "TheBloke/WizardLM-7B-uncensored-GPTQ"
 # model_basename = "WizardLM-7B-uncensored-GPTQ-4bit-128g.compat.no-act-order.safetensors"
 
-model_id = "TheBloke/Llama-2-7B-Chat-GGML"
-model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
+# model_id = "TheBloke/Llama-2-7B-Chat-GGML"
+# model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
+
+model_id = "TheBloke/orca_mini_v3_13B-GPTQ"
+model_basename = "gptq_model-4bit-128g.safetensors"
+
+if (input(f"Use default model id and basename\n{model_id}\n{model_basename}\n(y/n)? ") not in ["Y", "y"]):
+    model_id = input("Model ID: ")
+    model_basename = input("Model basename: ")
+if (model_basename == "None"):
+    model_basename = None
 
 LLM = load_model(device_type=DEVICE_TYPE, model_id=model_id, model_basename=model_basename)
 
@@ -147,6 +170,36 @@ def run_ingest_route():
         result = subprocess.run(run_langest_commands, capture_output=True)
         if result.returncode != 0:
             return "Script execution failed: {}".format(result.stderr.decode("utf-8")), 500
+        # load the vectorstore
+        DB = Chroma(
+            persist_directory=PERSIST_DIRECTORY,
+            embedding_function=EMBEDDINGS,
+            client_settings=CHROMA_SETTINGS,
+        )
+        RETRIEVER = DB.as_retriever()
+
+        QA = RetrievalQA.from_chain_type(
+            llm=LLM, chain_type="stuff", retriever=RETRIEVER, return_source_documents=SHOW_SOURCES
+        )
+        return "Script executed successfully: {}".format(result.stdout.decode("utf-8")), 200
+    except Exception as e:
+        return f"Error occurred: {str(e)}", 500
+    
+
+@app.route("/api/run_DB", methods=["GET"])
+def run_DB_route():
+    global DB
+    global RETRIEVER
+    global QA
+    try:
+        if os.path.exists(PERSIST_DIRECTORY):
+            try:
+                shutil.rmtree(PERSIST_DIRECTORY)
+            except OSError as e:
+                print(f"Error: {e.filename} - {e.strerror}.")
+        else:
+            print("The directory does not exist")
+
         # load the vectorstore
         DB = Chroma(
             persist_directory=PERSIST_DIRECTORY,

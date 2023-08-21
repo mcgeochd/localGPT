@@ -1,9 +1,10 @@
 import torch
 import subprocess
 import streamlit as st
+from pyngrok import ngrok
 from run_localGPT import load_model
 from langchain.vectorstores import Chroma
-from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY, MODEL_ID, MODEL_BASENAME
+from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY #, MODEL_ID, MODEL_BASENAME
 from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.chains import RetrievalQA
 from streamlit_extras.add_vertical_space import add_vertical_space
@@ -16,7 +17,9 @@ def model_memory():
     # Adding history to the model.
     template = """Use the following pieces of context to answer the question at the end. If you don't know the answer,\
     just say that you don't know, don't try to make up an answer.
+
     {context}
+
     {history}
     Question: {question}
     Helpful Answer:"""
@@ -25,6 +28,21 @@ def model_memory():
     memory = ConversationBufferMemory(input_key="question", memory_key="history")
 
     return prompt, memory
+
+# Commandline input model name
+MODEL_ID = "TheBloke/orca_mini_v3_13B-GPTQ"
+MODEL_BASENAME = "gptq_model-4bit-128g.safetensors"
+
+if (input(f"Use default model id and basename\n{MODEL_ID}\n{MODEL_BASENAME}\n(y/n)? ") not in ["Y", "y"]):
+    MODEL_ID = input("Model ID: ")
+    MODEL_BASENAME = input("Model basename: ")
+if (MODEL_BASENAME == "None"):
+    MODEL_BASENAME = None
+
+# Open a tunnel to localhost
+ngrok.kill()
+public_url = ngrok.connect(port="5111", proto="http", options={"bind_tls": True})
+print("Tracking URL:", public_url)
 
 # Sidebar contents
 with st.sidebar:
@@ -43,16 +61,20 @@ with st.sidebar:
 
 DEVICE_TYPE = "cuda" if torch.cuda.is_available() else "cpu"
 
-
-
 if "result" not in st.session_state:
-    # Run the document ingestion process. 
-    run_langest_commands = ["python", "ingest.py"]
-    run_langest_commands.append("--device_type")
-    run_langest_commands.append(DEVICE_TYPE)
+    while True:
+        ingest = input("Ingest documents? (y/n)")
+        if ingest in ["Y", "y"]:
+            # Run the document ingestion process. 
+            run_langest_commands = ["python", "ingest.py"]
+            run_langest_commands.append("--device_type")
+            run_langest_commands.append(DEVICE_TYPE)
 
-    result = subprocess.run(run_langest_commands, capture_output=True)
-    st.session_state.result = result
+            result = subprocess.run(run_langest_commands, capture_output=True)
+            st.session_state.result = result
+            break
+        elif ingest in ["N", "n"]:
+            break
 
 # Define the retreiver
 # load the vectorstore
@@ -75,9 +97,6 @@ if "RETRIEVER" not in st.session_state:
 if "LLM" not in st.session_state:
     LLM = load_model(device_type=DEVICE_TYPE, model_id=MODEL_ID, model_basename=MODEL_BASENAME)
     st.session_state["LLM"] = LLM
-
-
-
 
 if "QA" not in st.session_state:
 
@@ -108,7 +127,7 @@ if prompt:
     # With a streamlit expander  
     with st.expander('Document Similarity Search'):
         # Find the relevant pages
-        search = st.session_state.DB.similarity_search_with_score(prompt) 
+        search = st.session_state.DB.similarity_search_with_score(prompt)
         # Write out the first
         for i, doc in enumerate(search): 
             # print(doc)
