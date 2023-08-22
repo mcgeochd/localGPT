@@ -31,13 +31,13 @@ def model_memory():
 
 # Commandline input model name
 MODEL_ID = "TheBloke/orca_mini_v3_13B-GPTQ"
-MODEL_BASENAME = "gptq_model-4bit-128g.safetensors"
+MODEL_BASENAME = "model.safetensors"
 
-if (input(f"Use default model id and basename\n{MODEL_ID}\n{MODEL_BASENAME}\n(y/n)? ") not in ["Y", "y"]):
-    MODEL_ID = input("Model ID: ")
-    MODEL_BASENAME = input("Model basename: ")
-if (MODEL_BASENAME == "None"):
-    MODEL_BASENAME = None
+# if (input(f"Use default model id and basename\n{MODEL_ID}\n{MODEL_BASENAME}\n(y/n)? ") not in ["Y", "y"]):
+#     MODEL_ID = input("Model ID: ")
+#     MODEL_BASENAME = input("Model basename: ")
+# if (MODEL_BASENAME == "None"):
+#     MODEL_BASENAME = None
 
 # Open a tunnel to localhost
 ngrok.kill()
@@ -60,21 +60,6 @@ with st.sidebar:
 
 
 DEVICE_TYPE = "cuda" if torch.cuda.is_available() else "cpu"
-
-if "result" not in st.session_state:
-    while True:
-        ingest = input("Ingest documents? (y/n)")
-        if ingest in ["Y", "y"]:
-            # Run the document ingestion process. 
-            run_langest_commands = ["python", "ingest.py"]
-            run_langest_commands.append("--device_type")
-            run_langest_commands.append(DEVICE_TYPE)
-
-            result = subprocess.run(run_langest_commands, capture_output=True)
-            st.session_state.result = result
-            break
-        elif ingest in ["N", "n"]:
-            break
 
 # Define the retreiver
 # load the vectorstore

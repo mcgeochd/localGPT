@@ -121,10 +121,11 @@ def load_model(device_type, model_id, max_length, model_basename=None):
         model=model,
         tokenizer=tokenizer,
         max_length=max_length,
-        temperature=0,
+        temperature=1e-36, # strictly positive values only
         top_p=0.95,
         repetition_penalty=1.15,
         generation_config=generation_config,
+        do_sample=True
     )
 
     local_llm = HuggingFacePipeline(pipeline=pipe)

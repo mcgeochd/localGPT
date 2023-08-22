@@ -50,25 +50,6 @@ if os.path.exists(PERSIST_DIRECTORY):
 else:
     print("The directory does not exist")
 
-# Ingest documents
-if DEVICE_TYPE == "cpu":
-    while True:
-        ingest = input("Ingest documents? (y/n)")
-        if ingest in ["Y", "y"]:
-            # Run the document ingestion process. 
-            run_langest_commands = ["python", "ingest.py"]
-            run_langest_commands.append("--device_type")
-            run_langest_commands.append(DEVICE_TYPE)
-
-            result = subprocess.run(run_langest_commands, capture_output=True)
-            if result.returncode != 0:
-                raise FileNotFoundError(
-                    "No files were found inside SOURCE_DOCUMENTS, please put a starter file inside before starting the API!"
-                )
-            break
-        elif ingest in ["N", "n"]:
-            break
-
 # load the vectorstore
 DB = Chroma(
     persist_directory=PERSIST_DIRECTORY,
@@ -104,17 +85,17 @@ RETRIEVER = DB.as_retriever()
 model_id = "TheBloke/orca_mini_v3_13B-GPTQ"
 model_basename = "model.safetensors"
 
-if (input(f"Use default model id and basename\n{model_id}\n{model_basename}\n(y/n)? ") not in ["Y", "y"]):
-    model_id = input("Model ID: ")
-    model_basename = input("Model basename: ")
-if (model_basename == "None"):
-    model_basename = None
+# if (input(f"Use default model id and basename\n{model_id}\n{model_basename}\n(y/n)? ") not in ["Y", "y"]):
+#     model_id = input("Model ID: ")
+#     model_basename = input("Model basename: ")
+# if (model_basename == "None"):
+#     model_basename = None
 
-max_length = -1
-while max_length > 0 and max_length <= 4096:
-    max_length = input("Maximum context length (0 < L <= 4096): ")
+# max_length = -1
+# while max_length > 0 and max_length <= 4096:
+#     max_length = input("Maximum context length (0 < L <= 4096): ")
 
-LLM = load_model(device_type=DEVICE_TYPE, model_id=model_id, max_length=max_length, model_basename=model_basename)
+LLM = load_model(device_type=DEVICE_TYPE, model_id=model_id, max_length=4096, model_basename=model_basename)
 
 QA = RetrievalQA.from_chain_type(
     llm=LLM, chain_type="stuff", retriever=RETRIEVER, return_source_documents=SHOW_SOURCES
