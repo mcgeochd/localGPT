@@ -1,7 +1,7 @@
 import torch
 import subprocess
 import streamlit as st
-from pyngrok import ngrok
+from pyngrok import conf, ngrok
 from run_localGPT import load_model
 from langchain.vectorstores import Chroma
 from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY, MODEL_ID, MODEL_BASENAME, TEMPLATE
@@ -20,12 +20,14 @@ def model_memory():
 
     return prompt, memory
 
-# Open a tunnel to localhost
-ngrok.kill()
-public_url = ngrok.connect(port="5111", proto="http", options={"bind_tls": True})
-print("Tracking URL:", public_url)
-
 def run_UI():
+    # Open a tunnel to localhost
+    # ngrok.kill()
+    conf.get_default().auth_token = "2VLF45XQPiGHSOKsSY7MSUyRYop_2VDuNaon5tKkQUrHyeiUs"
+    conf.get_default().region = "uk"
+    public_url = ngrok.connect(port="5111", proto="http", options={"bind_tls": True})
+    print("Tracking URL:", public_url)
+
     # Sidebar contents
     with st.sidebar:
         st.title('🤗💬 Converse with your Data')

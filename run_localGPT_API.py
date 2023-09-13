@@ -69,7 +69,7 @@ QA = RetrievalQA.from_chain_type(
 )
 
 app = Flask(__name__)
-
+run_with_ngrok(app)
 
 @app.route("/api/delete_source", methods=["GET"])
 def delete_source_route():
@@ -193,7 +193,7 @@ def prompt_route():
     else:
         return "No user prompt received", 400
 
-run_with_ngrok(app)
+
 @app.route("/")
 def home():
     run_UI()
@@ -202,4 +202,5 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s", level=logging.INFO
     )
-    app.run(debug=False, port=5110)
+    # app.run(debug=False, port=5110)
+    app.run()
