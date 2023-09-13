@@ -27,6 +27,7 @@ click
 flask
 requests
 pyngrok
+flask_ngrok
 
 # Streamlit related
 streamlit

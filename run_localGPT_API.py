@@ -8,6 +8,7 @@ from auto_gptq import AutoGPTQForCausalLM
 from flask import Flask, jsonify, request
 from langchain.chains import RetrievalQA
 from langchain.embeddings import HuggingFaceInstructEmbeddings
+from flask_ngrok import run_with_ngrok
 
 # from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.llms import HuggingFacePipeline
@@ -25,7 +26,9 @@ from transformers import (
 )
 from werkzeug.utils import secure_filename
 
-from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY
+from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY, MODEL_ID, MODEL_BASENAME
+
+from localGPT_UI import run_UI
 
 DEVICE_TYPE = "cuda" if torch.cuda.is_available() else "cpu"
 SHOW_SOURCES = ""
@@ -59,43 +62,7 @@ DB = Chroma(
 
 RETRIEVER = DB.as_retriever()
 
-# for HF models
-# model_id = "TheBloke/vicuna-7B-1.1-HF"
-# model_id = "TheBloke/Wizard-Vicuna-7B-Uncensored-HF"
-# model_id = "TheBloke/guanaco-7B-HF"
-# model_id = 'NousResearch/Nous-Hermes-13b' # Requires ~ 23GB VRAM.
-# Using STransformers alongside will 100% create OOM on 24GB cards.
-# LLM = load_model(device_type=DEVICE_TYPE, model_id=model_id)
-
-# for GPTQ (quantized) models
-# model_id = "TheBloke/Nous-Hermes-13B-GPTQ"
-# model_basename = "nous-hermes-13b-GPTQ-4bit-128g.no-act.order"
-# model_id = "TheBloke/WizardLM-30B-Uncensored-GPTQ"
-# model_basename = "WizardLM-30B-Uncensored-GPTQ-4bit.act-order.safetensors"
-# Requires ~21GB VRAM. Using STransformers alongside can potentially create OOM on 24GB cards.
-# model_id = "TheBloke/wizardLM-7B-GPTQ"
-# model_basename = "wizardLM-7B-GPTQ-4bit.compat.no-act-order.safetensors"
-
-# model_id = "TheBloke/WizardLM-7B-uncensored-GPTQ"
-# model_basename = "WizardLM-7B-uncensored-GPTQ-4bit-128g.compat.no-act-order.safetensors"
-
-# model_id = "TheBloke/Llama-2-7B-Chat-GGML"
-# model_basename = "llama-2-7b-chat.ggmlv3.q4_0.bin"
-
-model_id = "TheBloke/orca_mini_v3_13B-GPTQ"
-model_basename = "model.safetensors"
-
-# if (input(f"Use default model id and basename\n{model_id}\n{model_basename}\n(y/n)? ") not in ["Y", "y"]):
-#     model_id = input("Model ID: ")
-#     model_basename = input("Model basename: ")
-# if (model_basename == "None"):
-#     model_basename = None
-
-# max_length = -1
-# while max_length > 0 and max_length <= 4096:
-#     max_length = input("Maximum context length (0 < L <= 4096): ")
-
-LLM = load_model(device_type=DEVICE_TYPE, model_id=model_id, max_length=4096, model_basename=model_basename)
+LLM = load_model(device_type=DEVICE_TYPE, model_id=MODEL_ID, max_length=4096, model_basename=MODEL_BASENAME)
 
 QA = RetrievalQA.from_chain_type(
     llm=LLM, chain_type="stuff", retriever=RETRIEVER, return_source_documents=SHOW_SOURCES
@@ -226,6 +193,10 @@ def prompt_route():
     else:
         return "No user prompt received", 400
 
+run_with_ngrok(app)
+@app.route("/")
+def home():
+    run_UI()
 
 if __name__ == "__main__":
     logging.basicConfig(
