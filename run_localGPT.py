@@ -1,48 +1,51 @@
+import os
 import logging
-
 import click
 import torch
-from auto_gptq import AutoGPTQForCausalLM
-from huggingface_hub import hf_hub_download
 from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
-from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceInstructEmbeddings
-from langchain.llms import HuggingFacePipeline, LlamaCpp
-from langchain.formatting import formatter
+from langchain.llms import HuggingFacePipeline
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler  # for streaming response
+from langchain.callbacks.manager import CallbackManager
 
-# from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
+
+from prompt_template_utils import get_prompt_template
+
 from langchain.vectorstores import Chroma
 from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
     GenerationConfig,
-    LlamaForCausalLM,
-    LlamaTokenizer,
     pipeline,
 )
 
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.chat_models import ChatOpenAI
+from load_models import (
+    load_quantized_model_gguf_ggml,
+    load_quantized_model_qptq,
+    load_full_model,
+)
 
-from constants import CHROMA_SETTINGS, EMBEDDING_MODEL_NAME, PERSIST_DIRECTORY, MODEL_ID, MODEL_BASENAME, TEMPLATE, DEVICE_TYPES
+from constants import (
+    EMBEDDING_MODEL_NAME,
+    PERSIST_DIRECTORY,
+    MODEL_ID,
+    MODEL_BASENAME,
+    MAX_NEW_TOKENS,
+    MODELS_PATH,
+)
 
 
-def load_model(device_type, model_id, max_length, model_basename=None):
+def load_model(device_type, model_id, model_basename=None, LOGGING=logging):
     """
     Select a model for text generation using the HuggingFace library.
     If you are running this for the first time, it will download a model for you.
     subsequent runs will use the model from the disk.
-
     Args:
         device_type (str): Type of device to use, e.g., "cuda" for GPU or "cpu" for CPU.
         model_id (str): Identifier of the model to load from HuggingFace's model hub.
         model_basename (str, optional): Basename of the model if using quantized models.
             Defaults to None.
-
     Returns:
         HuggingFacePipeline: A pipeline object for text generation using the loaded model.
-
     Raises:
         ValueError: If an unsupported model or device type is provided.
     """
@@ -50,64 +53,15 @@ def load_model(device_type, model_id, max_length, model_basename=None):
     logging.info("This action can take a few minutes!")
 
     if model_basename is not None:
-        if ".ggml" in model_basename:
-            logging.info("Using Llamacpp for GGML quantized models")
-            model_path = hf_hub_download(repo_id=model_id, filename=model_basename)
-            max_ctx_size = 2048
-            kwargs = {
-                "model_path": model_path,
-                "n_ctx": max_ctx_size,
-                "max_tokens": max_ctx_size,
-            }
-            if device_type.lower() == "mps":
-                kwargs["n_gpu_layers"] = 1000
-            if device_type.lower() == "cuda":
-                kwargs["n_gpu_layers"] = 1000
-                kwargs["n_batch"] = max_ctx_size
-            return LlamaCpp(**kwargs)
-
+        if ".gguf" in model_basename.lower():
+            llm = load_quantized_model_gguf_ggml(model_id, model_basename, device_type, LOGGING)
+            return llm
+        elif ".ggml" in model_basename.lower():
+            model, tokenizer = load_quantized_model_gguf_ggml(model_id, model_basename, device_type, LOGGING)
         else:
-            # The code supports all huggingface models that ends with GPTQ and have some variation
-            # of .no-act.order or .safetensors in their HF repo.
-            logging.info("Using AutoGPTQForCausalLM for quantized models")
-
-            if ".safetensors" in model_basename:
-                # Remove the ".safetensors" ending if present
-                model_basename = model_basename.replace(".safetensors", "")
-
-            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-            logging.info("Tokenizer loaded")
-
-            model = AutoGPTQForCausalLM.from_quantized(
-                model_id,
-                model_basename=model_basename,
-                use_safetensors=True,
-                trust_remote_code=True,
-                device="cuda:0",
-                use_triton=False,
-                quantize_config=None,
-            )
-    elif (
-        device_type.lower() == "cuda"
-    ):  # The code supports all huggingface models that ends with -HF or which have a .bin
-        # file in their HF repo.
-        logging.info("Using AutoModelForCausalLM for full models")
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        logging.info("Tokenizer loaded")
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            trust_remote_code=True,
-            max_memory={0: "12GB"} # Uncomment this line with you encounter CUDA out of memory errors
-        )
-        model.tie_weights()
+            model, tokenizer = load_quantized_model_qptq(model_id, model_basename, device_type, LOGGING)
     else:
-        logging.info("Using LlamaTokenizer")
-        tokenizer = LlamaTokenizer.from_pretrained(model_id)
-        model = LlamaForCausalLM.from_pretrained(model_id)
+        model, tokenizer = load_full_model(model_id, model_basename, device_type, LOGGING)
 
     # Load configuration from the model to avoid warnings
     generation_config = GenerationConfig.from_pretrained(model_id)
@@ -120,18 +74,76 @@ def load_model(device_type, model_id, max_length, model_basename=None):
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_length=max_length,
-        temperature=1e-36, # strictly positive values only
-        top_p=0.95,
+        max_length=MAX_NEW_TOKENS,
+        temperature=1e-5,
+        # top_p=0.95,
         repetition_penalty=1.15,
         generation_config=generation_config,
-        do_sample=True
     )
-
+    
     local_llm = HuggingFacePipeline(pipeline=pipe)
     logging.info("Local LLM Loaded")
-
     return local_llm
+
+
+def retrieval_qa_pipline(device_type, use_history, promptTemplate_type="llama"):
+    """
+    Initializes and returns a retrieval-based Question Answering (QA) pipeline.
+    This function sets up a QA system that retrieves relevant information using embeddings
+    from the HuggingFace library. It then answers questions based on the retrieved information.
+    Parameters:
+    - device_type (str): Specifies the type of device where the model will run, e.g., 'cpu', 'cuda', etc.
+    - use_history (bool): Flag to determine whether to use chat history or not.
+    Returns:
+    - RetrievalQA: An initialized retrieval-based QA system.
+    Notes:
+    - The function uses embeddings from the HuggingFace library, either instruction-based or regular.
+    - The Chroma class is used to load a vector store containing pre-computed embeddings.
+    - The retriever fetches relevant documents or data based on a query.
+    - The prompt and memory, obtained from the `get_prompt_template` function, might be used in the QA system.
+    - The model is loaded onto the specified device using its ID and basename.
+    - The QA system retrieves relevant documents using the retriever and then answers questions based on those documents.
+    """
+
+    embeddings = HuggingFaceInstructEmbeddings(model_name=EMBEDDING_MODEL_NAME, model_kwargs={"device": device_type})
+    # uncomment the following line if you used HuggingFaceEmbeddings in the ingest.py
+    # embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+
+    # load the vectorstore
+    db = Chroma(
+        persist_directory=PERSIST_DIRECTORY,
+        embedding_function=embeddings,
+    )
+    retriever = db.as_retriever()
+
+    # get the prompt template and memory if set by the user.
+    prompt, memory = get_prompt_template(promptTemplate_type=promptTemplate_type, history=use_history)
+
+    # load the llm pipeline
+    llm = load_model(device_type, model_id=MODEL_ID, model_basename=MODEL_BASENAME, LOGGING=logging)
+
+    if use_history:
+        qa = RetrievalQA.from_chain_type(
+            llm=llm,
+            chain_type="stuff",  # try other chains types as well. refine, map_reduce, map_rerank
+            retriever=retriever,
+            return_source_documents=True,  # verbose=True,
+            callbacks=callback_manager,
+            chain_type_kwargs={"prompt": prompt, "memory": memory},
+        )
+    else:
+        qa = RetrievalQA.from_chain_type(
+            llm=llm,
+            chain_type="stuff",  # try other chains types as well. refine, map_reduce, map_rerank
+            retriever=retriever,
+            return_source_documents=True,  # verbose=True,
+            callbacks=callback_manager,
+            chain_type_kwargs={
+                "prompt": prompt,
+            },
+        )
+
+    return qa
 
 
 # chose device typ to run on as well as to show source documents.
@@ -164,112 +176,44 @@ def load_model(device_type, model_id, max_length, model_basename=None):
     ),
     help="Device to run on. (Default is cuda)",
 )
-# @click.option(
-#     "--show_sources",
-#     "-s",
-#     is_flag=True,
-#     help="Show sources along with answers (Default is False)",
-# )
 @click.option(
-    "--openai",
-    "-o",
+    "--show_sources",
+    "-s",
     is_flag=True,
-    help="Use OpenAI as the llm model instead (Default is False)",
+    help="Show sources along with answers (Default is False)",
 )
 @click.option(
-    "--max_length",
-    default = 2048
+    "--use_history",
+    "-h",
+    is_flag=True,
+    help="Use history (Default is False)",
 )
-# def main(device_type, show_sources):
-def main(device_type, max_length, openai):
+def main(device_type, show_sources, use_history):
     """
-    This function implements the information retrieval task.
-
-
-    1. Loads an embedding model, can be HuggingFaceInstructEmbeddings or HuggingFaceEmbeddings
-    2. Loads the existing vectorestore that was created by ingest.py
-    3. Loads the local LLM using load_model function - You can now set different LLMs.
-    4. Setup the Question Answer retrieval chain.
-    5. Question answers.
+    Implements the main information retrieval task for a localGPT.
+    This function sets up the QA system by loading the necessary embeddings, vectorstore, and LLM model.
+    It then enters an interactive loop where the user can input queries and receive answers. Optionally,
+    the source documents used to derive the answers can also be displayed.
+    Parameters:
+    - device_type (str): Specifies the type of device where the model will run, e.g., 'cpu', 'mps', 'cuda', etc.
+    - show_sources (bool): Flag to determine whether to display the source documents used for answering.
+    - use_history (bool): Flag to determine whether to use chat history or not.
+    Notes:
+    - Logging information includes the device type, whether source documents are displayed, and the use of history.
+    - If the models directory does not exist, it creates a new one to store models.
+    - The user can exit the interactive loop by entering "exit".
+    - The source documents are displayed if the show_sources flag is set to True.
     """
 
-    # Take parameters in as inputs (command line doesn't work great with notebooks)
-    show_sources = ""
-    model_id = MODEL_ID
-    model_basename = MODEL_BASENAME
+    logging.info(f"Running on: {device_type}")
+    logging.info(f"Display Source Documents set to: {show_sources}")
+    logging.info(f"Use history set to: {use_history}")
 
-    while (show_sources not in [True, False]):
-        res = input ("Show sources (y/n): ")
-        if res == 'y':
-            show_sources = True
-        elif res == 'n':
-            show_sources = False
+    # check if models directory do not exist, create a new one and store models here.
+    if not os.path.exists(MODELS_PATH):
+        os.mkdir(MODELS_PATH)
 
-    if openai:
-        logging.info("Using OpenAI models, your queries are NOT local")
-        openai_api_key = input("Please provide a valid OpenAI API key: ")
-        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-        llm = ChatOpenAI(openai_api_key=openai_api_key)
-    else:
-        if (input(f"Use default model id and basename\n{model_id}\n{model_basename}\n(y/n)? ") not in ["Y", "y"]):
-            model_id = input("Model ID: ")
-            model_basename = input("Model basename: ")
-        if (model_basename == "None"):
-            model_basename = None
-
-        logging.info(f"Running on: {device_type}")
-        logging.info(f"Display Source Documents set to: {show_sources}")
-        logging.info(f"Model ID: {model_id}")
-        logging.info(f"Model basename: {model_basename}")
-
-        embeddings = HuggingFaceInstructEmbeddings(
-            model_name=EMBEDDING_MODEL_NAME,
-            model_kwargs={"device": device_type},
-        )
-
-        # load the LLM for generating Natural Language responses
-        llm = load_model(device_type, model_id=model_id, max_length=max_length, model_basename=model_basename)
-
-    # uncomment the following line if you used HuggingFaceEmbeddings in the ingest.py
-    # embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
-
-    # load the vectorstore
-    db = Chroma(
-        persist_directory=PERSIST_DIRECTORY,
-        embedding_function=embeddings,
-        client_settings=CHROMA_SETTINGS,
-    )
-    retriever = db.as_retriever()
-
-    prompt = PromptTemplate(input_variables=["history", "context", "question"], template=TEMPLATE)
-    memory = ConversationBufferMemory(input_key="question", memory_key="history")
-
-    # # Remove old chat history to stay within context window
-    # def truncate_prompt(history, context, question):
-    #     template = \
-    #     """
-    #     Use the following context and conversation history to answer the question at the end. If you don't know the answer,\
-    #     just say that you don't know, don't try to make up an answer.
-    #     Context: {context}
-    #     History: {history}
-    #     Question: {question}
-    #     Helpful Answer:
-    #     """
-    #     prompt = formatter.format(template, context, history, question)
-    #     extra = len(prompt) - max_length
-    #     if extra > 0:
-    #         prompt = formatter.format(template, context, history[extra:], question)
-    #     return prompt
-    
-    # truncate_prompt.input_variables=["history", "context", "question"]
-
-    qa = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=retriever,
-        return_source_documents=True,
-        chain_type_kwargs={"prompt": prompt, "memory": memory},
-    )
+    qa = retrieval_qa_pipline(device_type, use_history, promptTemplate_type="llama")
 
     # Interactive questions and answers
     while True:
