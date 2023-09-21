@@ -75,6 +75,7 @@ def load_model(device_type, model_id, model_basename=None, LOGGING=logging):
         model=model,
         tokenizer=tokenizer,
         max_length=MAX_NEW_TOKENS,
+        do_sample=True,
         temperature=1e-5,
         # top_p=0.95,
         repetition_penalty=1.15,
@@ -213,7 +214,7 @@ def main(device_type, show_sources, use_history):
     if not os.path.exists(MODELS_PATH):
         os.mkdir(MODELS_PATH)
 
-    qa = retrieval_qa_pipline(device_type, use_history, promptTemplate_type="llama")
+    qa = retrieval_qa_pipline(device_type, use_history, promptTemplate_type="")
 
     # Interactive questions and answers
     while True:

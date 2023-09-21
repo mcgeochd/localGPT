@@ -125,7 +125,7 @@ is_flag=True,
 help="Use OpenAI as the embedding model instead (Default is False)",
 )
 
-def main(device_type, openai):
+def main(device_type):
     # Take variable source directory because we're in a notebook
     source_directory = input('Source directory (type "default" for default): ')
     if source_directory == "default":
@@ -145,16 +145,11 @@ def main(device_type, openai):
     logging.info(f"Split into {len(texts)} chunks of text")
 
     # Create embeddings
-    if openai:
-        logging.info("Using OpenAI embedding model, your documents are NOT local")
-        openai_api_key = input("Please provide a valid OpenAI API key: ")
-        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-    else:
-        logging.info("Using HuggingFaceInstructEmbeddings, your documents are local")
-        embeddings = HuggingFaceInstructEmbeddings(
-            model_name=EMBEDDING_MODEL_NAME,
-            model_kwargs={"device": device_type},
-        )
+    logging.info("Using HuggingFaceInstructEmbeddings")
+    embeddings = HuggingFaceInstructEmbeddings(
+        model_name=EMBEDDING_MODEL_NAME,
+        model_kwargs={"device": device_type},
+    )
     # change the embedding type here if you are running into issues.
     # These are much smaller embeddings and will work for most appications
     # If you use HuggingFaceEmbeddings, make sure to also use the same in the
@@ -168,9 +163,7 @@ def main(device_type, openai):
         persist_directory=PERSIST_DIRECTORY,
         client_settings=CHROMA_SETTINGS,
     )
-    db.persist()
-    db = None
-
+    
 
 if __name__ == "__main__":
     logging.basicConfig(
