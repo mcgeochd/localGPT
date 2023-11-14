@@ -9,8 +9,6 @@ from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.text_splitter import Language, RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
 
-from langchain.embeddings import OpenAIEmbeddings
-
 from constants import (
     CHROMA_SETTINGS,
     DOCUMENT_MAP,
@@ -117,12 +115,6 @@ def split_documents(documents: list[Document]) -> tuple[list[Document], list[Doc
         ],
     ),
     help="Device to run on. (Default is cuda)",
-)
-@click.option(
-"--openai",
-"-o",
-is_flag=True,
-help="Use OpenAI as the embedding model instead (Default is False)",
 )
 
 def main(device_type):
